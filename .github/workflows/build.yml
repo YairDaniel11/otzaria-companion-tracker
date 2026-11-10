@@ -6,6 +6,15 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'פרסם Release ב-GitHub'
+        type: boolean
+        default: false
+      version:
+        description: 'מספר גרסה ל-Release (למשל 1.0.0)'
+        type: string
+        default: '1.0.0'
 
 permissions:
   contents: write
@@ -21,6 +30,7 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') }
+          elseif ('${{ github.event.inputs.release }}' -eq 'true') { $v = '${{ github.event.inputs.version }}'.TrimStart('v') }
           else { $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)" }
           "version=$v" >> $env:GITHUB_OUTPUT
 
@@ -75,9 +85,11 @@ jobs:
             dist/*.exe
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
           files: |
             dist/*.zip
             dist/*.exe
