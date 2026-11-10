@@ -1,4 +1,4 @@
-\xef\xbb\xbf; Inno Setup script. Build: ISCC /DAppVersion=1.0.0 installer\setup.iss
+﻿; Inno Setup script. Build: ISCC /DAppVersion=1.0.0 installer\setup.iss
 ; Expects the assembled app in ..\dist\OtzariaCompanionTracker\
 #ifndef AppVersion
   #define AppVersion "1.0.0"
@@ -24,7 +24,11 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Languages]
+#if FileExists(CompilerPath + "Languages\Hebrew.isl")
 Name: "hebrew"; MessagesFile: "compiler:Languages\Hebrew.isl"
+#else
+Name: "english"; MessagesFile: "compiler:Default.isl"
+#endif
 
 [Tasks]
 Name: "autostart"; Description: "הפעל את המעקב אוטומטית עם ווינדוס (מומלץ)"

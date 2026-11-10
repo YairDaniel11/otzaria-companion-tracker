@@ -43,18 +43,25 @@ class SettingsPage extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 20),
             _section(context, 'מראה', [
-              ListTile(
-                title: const Text('ערכת נושא'),
-                trailing: SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'light', label: Text('בהיר')),
-                    ButtonSegment(value: 'system', label: Text('מערכת')),
-                    ButtonSegment(value: 'dark', label: Text('כהה')),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('ערכת נושא', style: TextStyle(fontSize: 16)),
+                    ),
+                    SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 'light', label: Text('בהיר')),
+                        ButtonSegment(value: 'system', label: Text('מערכת')),
+                        ButtonSegment(value: 'dark', label: Text('כהה')),
+                      ],
+                      selected: {c.theme},
+                      onSelectionChanged: (s) =>
+                          store.update((x) => x.theme = s.first),
+                    ),
                   ],
-                  selected: {c.theme},
-                  onSelectionChanged: (s) =>
-                      store.update((x) => x.theme = s.first),
                 ),
               ),
             ]),
@@ -103,7 +110,7 @@ class SettingsPage extends StatelessWidget {
                 title: const Text('הפעלה מחדש אחרי קריסה'),
                 subtitle: const Text('מספר ניסיונות מקסימלי לכל תוכנה'),
                 trailing: DropdownButton<int>(
-                  value: c.maxRestarts.clamp(0, 5),
+                  value: c.maxRestarts.clamp(0, 5).toInt(),
                   items: [0, 1, 2, 3, 4, 5]
                       .map((s) => DropdownMenuItem(
                           value: s, child: Text(s == 0 ? 'ללא' : '$s')))

@@ -28,7 +28,7 @@ ThemeData _buildTheme(Brightness b) {
     colorScheme: scheme,
     fontFamily: 'Segoe UI',
     scaffoldBackgroundColor: scheme.surface,
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 0,
       color: b == Brightness.light ? const Color(0xFFFFF8F3) : null,
       shape: RoundedRectangleBorder(
