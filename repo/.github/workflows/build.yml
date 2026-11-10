@@ -1,0 +1,84 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') }
+          else { $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      # ---------- background guard (C#, Native AOT) ----------
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish guard
+        shell: pwsh
+        run: dotnet publish guard/OtzariaCompanionGuard.csproj -c Release -r win-x64 -o out/guard
+
+      # ---------- settings UI (Flutter) ----------
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare Flutter Windows runner
+        shell: pwsh
+        run: ./scripts/prepare-ui.ps1
+
+      - name: Build UI
+        shell: pwsh
+        working-directory: ui
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      # ---------- assemble ----------
+      - name: Assemble app folder
+        shell: pwsh
+        run: |
+          $app = 'dist/OtzariaCompanionTracker'
+          New-Item "$app/ui" -ItemType Directory -Force | Out-Null
+          Copy-Item out/guard/OtzariaCompanionGuard.exe $app
+          Copy-Item 'ui/build/windows/x64/runner/Release/*' "$app/ui" -Recurse
+          Compress-Archive -Path $app -DestinationPath "dist/OtzariaCompanionTracker-portable-x64-${{ steps.ver.outputs.version }}.zip"
+
+      # ---------- installer ----------
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.ver.outputs.version }}" installer\setup.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OtzariaCompanionTracker-${{ steps.ver.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/*.exe
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.exe
+          generate_release_notes: true
