@@ -27,11 +27,11 @@ internal unsafe struct NOTIFYICONDATA
     public nint hWnd;
     public uint uID, uFlags, uCallbackMessage;
     public nint hIcon;
-    public fixed char szTip[128];
+    public fixed ushort szTip[128];
     public uint dwState, dwStateMask;
-    public fixed char szInfo[256];
+    public fixed ushort szInfo[256];
     public uint uTimeoutOrVersion;
-    public fixed char szInfoTitle[64];
+    public fixed ushort szInfoTitle[64];
     public uint dwInfoFlags;
     public Guid guidItem;
     public nint hBalloonIcon;
@@ -45,8 +45,26 @@ internal unsafe struct PROCESSENTRY32
     public uint th32ModuleID, cntThreads, th32ParentProcessID;
     public int pcPriClassBase;
     public uint dwFlags;
-    public fixed char szExeFile[260];
+    public fixed ushort szExeFile[260];
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct RECT { public int Left, Top, Right, Bottom; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct MEASUREITEMSTRUCT { public uint CtlType, CtlID, itemID, itemWidth, itemHeight; public nuint itemData; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct DRAWITEMSTRUCT
+{
+    public uint CtlType, CtlID, itemID, itemAction, itemState;
+    public nint hwndItem, hDC;
+    public RECT rcItem;
+    public nuint itemData;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct MENUINFO { public uint cbSize, fMask, dwStyle, cyMax; public nint hbrBack; public uint dwContextHelpID; public nuint dwMenuData; }
 
 internal readonly record struct ProcEntry(int Pid, int Ppid, string Name);
 
@@ -55,6 +73,8 @@ internal static unsafe class Native
     public const uint WM_DESTROY = 0x0002, WM_TIMER = 0x0113, WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B;
     public const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2;
     public const uint NIF_MESSAGE = 1, NIF_ICON = 2, NIF_TIP = 4;
+    public const uint WM_MEASUREITEM = 0x002C, WM_DRAWITEM = 0x002B;
+    public const uint DT_CENTER = 0x1, DT_RIGHT = 0x2, DT_VCENTER = 0x4, DT_SINGLELINE = 0x20, DT_NOPREFIX = 0x800, DT_END_ELLIPSIS = 0x8000, DT_RTLREADING = 0x20000;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern ushort RegisterClassExW(ref WNDCLASSEX wc);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern nint CreateWindowExW(uint ex, string cls, string title, uint style, int x, int y, int w, int h, nint parent, nint menu, nint inst, nint param);
@@ -68,6 +88,20 @@ internal static unsafe class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessageW(string s);
     [DllImport("user32.dll")] public static extern nint CreatePopupMenu();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool AppendMenuW(nint menu, uint flags, nuint id, string? item);
+    [DllImport("user32.dll", EntryPoint = "AppendMenuW")] public static extern bool AppendMenuOwner(nint menu, uint flags, nuint id, nint data);
+    [DllImport("user32.dll")] public static extern bool SetMenuInfo(nint menu, ref MENUINFO mi);
+    [DllImport("user32.dll")] public static extern int FillRect(nint dc, ref RECT rc, nint brush);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int DrawTextW(nint dc, string text, int len, ref RECT rc, uint fmt);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(nint h);
+    [DllImport("gdi32.dll")] public static extern nint CreateSolidBrush(uint color);
+    [DllImport("gdi32.dll")] public static extern nint CreatePen(int style, int width, uint color);
+    [DllImport("gdi32.dll")] public static extern nint SelectObject(nint dc, nint obj);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(nint obj);
+    [DllImport("gdi32.dll")] public static extern int SetBkMode(nint dc, int mode);
+    [DllImport("gdi32.dll")] public static extern uint SetTextColor(nint dc, uint color);
+    [DllImport("gdi32.dll")] public static extern bool RoundRect(nint dc, int l, int t, int r, int b, int w, int h);
+    [DllImport("gdi32.dll")] public static extern bool Ellipse(nint dc, int l, int t, int r, int b);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern nint CreateFontW(int h, int w, int esc, int orient, int weight, uint italic, uint underline, uint strike, uint charset, uint outPrec, uint clipPrec, uint quality, uint pitch, string face);
     [DllImport("user32.dll")] public static extern int TrackPopupMenu(nint menu, uint flags, int x, int y, int reserved, nint hwnd, nint rect);
     [DllImport("user32.dll")] public static extern bool DestroyMenu(nint menu);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
@@ -111,7 +145,7 @@ internal static unsafe class Native
             var e = new PROCESSENTRY32 { dwSize = (uint)sizeof(PROCESSENTRY32) };
             if (Process32FirstW(h, ref e))
             {
-                do { res.Add(new ProcEntry((int)e.th32ProcessID, (int)e.th32ParentProcessID, new string(e.szExeFile))); }
+                do { res.Add(new ProcEntry((int)e.th32ProcessID, (int)e.th32ParentProcessID, new string((char*)e.szExeFile))); }
                 while (Process32NextW(h, ref e));
             }
         }

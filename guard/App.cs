@@ -78,13 +78,17 @@ internal static unsafe class App
         }
     }
 
-    static string Tip()
+    static TrayState State() => sup.Paused ? TrayState.Paused : sup.TargetRunning ? TrayState.Running : TrayState.Waiting;
+
+    static string Status() => State() switch
     {
-        if (sup.Paused) return "מעקב תוכנות נלוות לאוצריא - מושהה";
-        return sup.TargetRunning
-            ? $"אוצריא פועלת · {sup.ActiveCount} תוכנות נלוות"
-            : "ממתין לפתיחת אוצריא";
-    }
+        TrayState.Paused => "מושהה",
+        TrayState.Running => $"אוצריא פועלת · {sup.ActiveCount} תוכנות נלוות",
+        _ => "ממתין לפתיחת אוצריא",
+    };
+
+    // Hover tooltip: app name on the first line, status below. \u200F = RTL mark so both lines align right.
+    static string Tip() => "\u200F" + Tray.AppTitle + "\n\u200F" + Status();
 
     static void ApplyTray()
     {
@@ -127,6 +131,8 @@ internal static unsafe class App
         try
         {
             if (msg == Native.WM_TIMER) { OnTick(); return 0; }
+            if (msg == Native.WM_MEASUREITEM) { Tray.Measure(lParam); return 1; }
+            if (msg == Native.WM_DRAWITEM) { Tray.Draw(lParam); return 1; }
 
             if (msg == Tray.CallbackMsg)
             {
@@ -134,8 +140,7 @@ internal static unsafe class App
                 if (ev == Native.WM_LBUTTONUP) Ui.Open();
                 else if (ev == Native.WM_RBUTTONUP || ev == Native.WM_CONTEXTMENU)
                 {
-                    var status = Tip();
-                    switch (tray.ShowMenu(status, sup.Paused))
+                    switch (tray.ShowMenu(Status(), State(), sup.Paused, sup.Cfg.Theme))
                     {
                         case Tray.CmdOpen: Ui.Open(); break;
                         case Tray.CmdPause: sup.Paused = !sup.Paused; ApplyTray(); break;

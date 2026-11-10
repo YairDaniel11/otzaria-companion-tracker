@@ -30,9 +30,17 @@
 
 ## בנייה
 
+### הורדה (קישורים קבועים לגרסה האחרונה)
+* התקנה: `https://github.com/<משתמש>/<ריפו>/releases/latest/download/OtzariaCompanionTracker-Setup.exe`
+* גרסה ניידת: `https://github.com/<משתמש>/<ריפו>/releases/latest/download/OtzariaCompanionTracker-Portable.zip`
+
+שמות הקבצים קבועים (ללא מספר גרסה), ולכן הקישורים לא משתנים בין גרסאות.
+
 ### ב-GitHub (מומלץ)
-דחיפה ל-`main` או הרצה ידנית של ה-Workflow בונה הכול ומעלה Artifacts: zip נייד + מתקין.
-שחרור גרסה: `git tag v1.0.0 && git push --tags` - נוצר Release עם הקבצים.
+כל דחיפה ל-`main` בונה ויוצרת **Release חדש** (גרסה אוטומטית `1.0.<מספר ריצה>`, מסומן כאחרון) עם שני הקבצים. הקישורים הקבועים למעלה תמיד מצביעים עליו.
+* Pull Request - בנייה בלבד, בלי Release.
+* גרסה ידנית: `git tag v2.0.0 && git push --tags`, או הרצה ידנית של ה-Workflow עם מספר גרסה.
+* כדי לשנות את קידומת הגרסה האוטומטית - ערוך `BASE_VERSION` ב-`build.yml`.
 
 ### מקומית (Windows)
 דרישות: .NET 8 SDK + "Desktop development with C++" (ל-AOT), Flutter SDK, ו-Inno Setup אם רוצים מתקין.
