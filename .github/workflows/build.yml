@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') }
-          elseif ('${{ github.event.inputs.release }}' -eq 'true') { $v = '${{ github.event.inputs.version }}'.TrimStart('v') }
+          elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { $v = '${{ github.event.inputs.version }}'.TrimStart('v'); if (-not $v) { $v = '1.0.0' } }
           else { $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)" }
           "version=$v" >> $env:GITHUB_OUTPUT
 
@@ -84,13 +84,25 @@ jobs:
             dist/*.zip
             dist/*.exe
 
+      - name: Release decision
+        shell: pwsh
+        run: |
+          Write-Host "event      : $env:GITHUB_EVENT_NAME"
+          Write-Host "ref        : $env:GITHUB_REF"
+          Write-Host "version    : ${{ steps.ver.outputs.version }}"
+          Write-Host "tag        : v${{ steps.ver.outputs.version }}"
+          Get-ChildItem dist -File | ForEach-Object { Write-Host "file       : $($_.Name)" }
+
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(steps.ver.outputs.version, 'dev') }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
           files: |
             dist/*.zip
             dist/*.exe
-          generate_release_notes: true
