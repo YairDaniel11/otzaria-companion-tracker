@@ -44,6 +44,7 @@ class Config {
   int gracefulTimeoutSeconds = 5;
   int maxRestarts = 3;
   bool learning = true;
+  bool paused = false; // set by the tray menu; must round-trip so UI saves don't reset it
   List<AppEntry> apps = [];
 
   Config();
@@ -59,6 +60,7 @@ class Config {
         (j['gracefulTimeoutSeconds'] ?? c.gracefulTimeoutSeconds) as int;
     c.maxRestarts = (j['maxRestarts'] ?? c.maxRestarts) as int;
     c.learning = (j['learning'] ?? c.learning) as bool;
+    c.paused = (j['paused'] ?? c.paused) as bool;
     c.apps = ((j['apps'] ?? []) as List)
         .map((e) => AppEntry.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -74,6 +76,7 @@ class Config {
         'gracefulTimeoutSeconds': gracefulTimeoutSeconds,
         'maxRestarts': maxRestarts,
         'learning': learning,
+        'paused': paused,
         'apps': apps.map((a) => a.toJson()).toList(),
       };
 }

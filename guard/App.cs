@@ -143,10 +143,11 @@ internal static unsafe class App
                     switch (tray.ShowMenu(Status(), State(), sup.Paused, sup.Cfg.Theme))
                     {
                         case Tray.CmdOpen: Ui.Open(); break;
-                        case Tray.CmdPause: sup.Paused = !sup.Paused; ApplyTray(); break;
+                        case Tray.CmdPause: sup.SetPaused(!sup.Paused); ApplyTray(); break;
                         case Tray.CmdExit:
                             tray.Hide();
                             Native.KillTimer(hwnd, 1);
+                            sup.Shutdown();      // close the companions this tool started
                             Native.PostQuitMessage(0);
                             break;
                     }

@@ -23,6 +23,7 @@ public sealed class Config
     public int GracefulTimeoutSeconds { get; set; } = 5;
     public int MaxRestarts { get; set; } = 3;
     public bool Learning { get; set; } = true;
+    public bool Paused { get; set; } = false;               // remembered across restarts
     public List<AppEntry> Apps { get; set; } = new();
 }
 

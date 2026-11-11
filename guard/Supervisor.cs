@@ -8,6 +8,9 @@ internal sealed class Managed
     public Process? Proc;
     public bool Ours;       // started by us (vs. already running when we attached)
     public int Restarts;
+    public DateTime StartedAt;
+    public DateTime NextTry;   // earliest time for a restart attempt
+    public bool GaveUp;        // one-shot / failing program: never launch again until Otzaria restarts
 }
 
 /// <summary>Watches the target process and starts/stops the companion programs. Single-threaded (called from the timer).</summary>
@@ -17,10 +20,38 @@ internal sealed class Supervisor
     DateTime cfgStamp = Store.Stamp();
     bool wasRunning;
     readonly Dictionary<string, Managed> managed = new(StringComparer.OrdinalIgnoreCase);
+    static readonly TimeSpan QuickExit = TimeSpan.FromSeconds(20);
     HashSet<int>? baseline;
     DateTime? learnAt;
 
     public bool Paused;
+
+    public Supervisor() { Paused = cfg.Paused; }
+
+    /// <summary>Pause/resume and remember the choice in config.json (so it survives a restart).</summary>
+    public void SetPaused(bool value)
+    {
+        Paused = value;
+        try
+        {
+            var c = Store.TryLoad();          // re-read: never overwrite a newer edit made by the settings UI
+            if (c == null) return;            // unreadable file: don't replace it with defaults
+            c.Paused = value;
+            Store.Save(c);
+            cfg = c;
+            cfgStamp = Store.Stamp();
+            ConfigChanged = true;
+        }
+        catch { }
+    }
+
+    /// <summary>Called when the guard exits: close, and wait for, the companions this guard started itself.</summary>
+    public void Shutdown()
+    {
+        var tasks = managed.Values.Where(m => m.Ours && m.Proc != null).Select(m => StopAsync(m.Proc)).ToArray();
+        managed.Clear();
+        try { Task.WaitAll(tasks, TimeSpan.FromSeconds(Math.Clamp(cfg.GracefulTimeoutSeconds, 1, 60) + 3)); } catch { }
+    }
     public bool ConfigChanged;
     public Config Cfg => cfg;
     public bool TargetRunning => wasRunning;
@@ -42,7 +73,7 @@ internal sealed class Supervisor
         {
             cfgStamp = st;
             var c = Store.TryLoad();
-            if (c != null) { cfg = c; ConfigChanged = true; }
+            if (c != null) { cfg = c; Paused = c.Paused; ConfigChanged = true; }
         }
         if (Paused) return;
 
@@ -99,10 +130,27 @@ internal sealed class Supervisor
                 continue;
             }
             m.Entry = a;
-            if (m.Ours && m.Proc != null && Exited(m.Proc))
+            if (m.GaveUp || !m.Ours) continue;
+
+            var now = DateTime.UtcNow;
+            if (m.Proc != null && Exited(m.Proc))
             {
-                if (m.Restarts < cfg.MaxRestarts) { m.Restarts++; m.Proc.Dispose(); Launch(m); }
+                var ranFor = now - m.StartedAt;
+                m.Proc.Dispose();
+                m.Proc = null;
+
+                // A stub / single-instance program may have handed over to a process that is still alive: attach to it.
+                var alive = FindByPath(a.Path);
+                if (alive != null) { m.Proc = alive; m.Ours = false; continue; }
+
+                // Quit almost immediately = one-shot tool, helper or failing program. Restarting it would only
+                // flash a window every couple of seconds, so stop trying.
+                if (ranFor < QuickExit || m.Restarts >= cfg.MaxRestarts) { m.GaveUp = true; continue; }
+
+                m.Restarts++;
+                m.NextTry = now.AddSeconds(5 * m.Restarts);   // back-off: 5s, 10s, 15s...
             }
+            if (m.Proc == null && now >= m.NextTry) Launch(m);
         }
 
         var removed = managed.Keys.Where(k => !desired.Any(d => d.Path.Equals(k, StringComparison.OrdinalIgnoreCase))).ToList();
@@ -118,6 +166,7 @@ internal sealed class Supervisor
     {
         var existing = FindByPath(m.Entry.Path);
         if (existing != null) { m.Proc = existing; m.Ours = false; }
+        else if (Helpers.IsHelper(m.Entry.Path)) { m.Ours = false; m.GaveUp = true; }   // Otzaria starts these itself
         else Launch(m);
     }
 
@@ -126,9 +175,11 @@ internal sealed class Supervisor
         try
         {
             var path = m.Entry.Path;
+            if (!File.Exists(path)) { m.Proc = null; m.Ours = false; m.GaveUp = true; return; }
             var psi = new ProcessStartInfo(path)
             {
                 UseShellExecute = false,
+                CreateNoWindow = true,      // console programs must not pop up a black window
                 Arguments = m.Entry.Args ?? "",
                 WorkingDirectory = string.IsNullOrWhiteSpace(m.Entry.WorkingDir)
                     ? (System.IO.Path.GetDirectoryName(path) ?? "")
@@ -136,11 +187,13 @@ internal sealed class Supervisor
             };
             m.Proc = Process.Start(psi);
             m.Ours = m.Proc != null;
+            m.StartedAt = DateTime.UtcNow;
         }
         catch
         {
             m.Proc = null;
             m.Ours = false;
+            m.GaveUp = true;
         }
     }
 
@@ -173,11 +226,11 @@ internal sealed class Supervisor
         managed.Clear();
     }
 
-    void StopAsync(Process? p)
+    Task StopAsync(Process? p)
     {
-        if (p == null) return;
+        if (p == null) return Task.CompletedTask;
         int timeout = Math.Clamp(cfg.GracefulTimeoutSeconds, 1, 60) * 1000;
-        Task.Run(() =>
+        return Task.Run(() =>
         {
             try
             {
@@ -209,7 +262,7 @@ internal sealed class Supervisor
                 if (path == null) continue;
                 if (path.StartsWith(win, StringComparison.OrdinalIgnoreCase)) continue;
                 if (path.StartsWith(self, StringComparison.OrdinalIgnoreCase)) continue;
-                if (known.Contains(path)) continue;
+                if (known.Contains(path) || Helpers.IsHelper(path)) continue;
                 if (System.IO.Path.GetFileNameWithoutExtension(path).Equals(TargetName, StringComparison.OrdinalIgnoreCase)) continue;
                 found.Add(path);
             }
@@ -226,5 +279,24 @@ internal sealed class Supervisor
             Store.SaveLearned(list);
         }
         catch { }
+    }
+}
+
+/// <summary>Executables that belong to Otzaria / the runtime and are started by Otzaria itself when needed
+/// (crash reporters, updaters, the portable-disk launcher...). They are not companions: launching them from here
+/// opens windows ("Otzaria not found") or flashes a console.</summary>
+internal static class Helpers
+{
+    static readonly string[] Names =
+    {
+        "crashpad_handler", "createdump", "otzaria_launcher", "otzaria_updater", "zstd",
+        "msedgewebview2", "msedge", "msedgewebview2_installer", "vc_redist", "dotnet", "conhost", "cmd", "powershell",
+    };
+
+    public static bool IsHelper(string path)
+    {
+        var n = System.IO.Path.GetFileNameWithoutExtension(path);
+        if (n.StartsWith("unins", StringComparison.OrdinalIgnoreCase)) return true;
+        return Names.Any(x => n.Equals(x, StringComparison.OrdinalIgnoreCase));
     }
 }

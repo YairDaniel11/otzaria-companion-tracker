@@ -33,7 +33,7 @@ internal static class Discovery
             try
             {
                 var path = Native.GetPath(p.Id);
-                if (path == null || IsSystem(path) || IsSelf(path)) continue;
+                if (path == null || IsSystem(path) || IsSelf(path) || Helpers.IsHelper(path)) continue;
                 var mb = p.WorkingSet64 / 1048576.0;
                 if (map.TryGetValue(path, out var e)) e.MemoryMb = Math.Round(e.MemoryMb + mb, 1);
                 else map[path] = new ProgramInfo { Path = path, Name = Describe(path), MemoryMb = Math.Round(mb, 1) };
@@ -164,7 +164,7 @@ internal static class Discovery
 
         void Add(string path, string reason)
         {
-            if (IsSystem(path) || IsSelf(path) || IsTarget(path)) return;
+            if (IsSystem(path) || IsSelf(path) || IsTarget(path) || Helpers.IsHelper(path)) return;
             if (!seen.Add(path)) return;
             res.Add(new ProgramInfo { Path = path, Name = Describe(path), Reason = reason });
         }
